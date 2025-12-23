@@ -1,0 +1,62 @@
+version: "3.9"
+
+services:
+  db:
+    image: postgres:15
+    environment:
+      POSTGRES_USER: meditrack
+      POSTGRES_PASSWORD: meditrack
+      POSTGRES_DB: meditrack
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - meditrack_net
+
+  pgadmin:
+    image: dpage/pgadmin4:8.11
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@meditrack.com
+      PGADMIN_DEFAULT_PASSWORD: admin
+    ports:
+      - "5050:80"
+    depends_on:
+      - db
+    networks:
+      - meditrack_net
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    environment:
+      DATABASE_URL: postgresql+psycopg2://meditrack:meditrack@db:5432/meditrack
+      SECRET_KEY: supersecret
+      ACCESS_TOKEN_EXPIRE_MINUTES: 60
+      ADMIN_DEFAULT_EMAIL: admin@meditrack.com
+      ADMIN_DEFAULT_PASSWORD: ChangeMe123!
+    ports:
+      - "8000:8000"
+    depends_on:
+      - db
+    networks:
+      - meditrack_net
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    environment:
+      VITE_API_BASE_URL: http://localhost:8000/api/v1
+    ports:
+      - "5173:80"
+    depends_on:
+      - backend
+    networks:
+      - meditrack_net
+
+networks:
+  meditrack_net:
+    driver: bridge
+
+volumes:
+  postgres_data:
