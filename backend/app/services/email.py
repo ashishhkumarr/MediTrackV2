@@ -138,6 +138,36 @@ def build_cancellation_email(
     return subject, html_body.strip(), text_body
 
 
+def build_reminder_email(
+    patient_name: str,
+    clinic_name: str,
+    start_time: datetime,
+    end_time: datetime | None,
+    doctor: str | None,
+    department: str | None,
+    notes: str | None,
+):
+    subject = f"Appointment reminder - {clinic_name}"
+    details = _build_details_lines(start_time, end_time, doctor, department, notes)
+    html_body = f"""
+    <p>Hello {patient_name},</p>
+    <p>This is a reminder about your upcoming appointment with {clinic_name}.</p>
+    <p><strong>Appointment details</strong><br/>
+    {'<br/>'.join(details)}</p>
+    <p>If you need to reschedule, contact the clinic.</p>
+    """
+    text_body = "\n".join(
+        [
+            f"Hello {patient_name},",
+            f"This is a reminder about your upcoming appointment with {clinic_name}.",
+            "Appointment details:",
+            *details,
+            "If you need to reschedule, contact the clinic.",
+        ]
+    )
+    return subject, html_body.strip(), text_body
+
+
 def send_email(
     to: str,
     subject: str,
@@ -148,9 +178,7 @@ def send_email(
     preview = " ".join(preview_source.split())[:200]
 
     if not settings.EMAIL_ENABLED:
-        logger.info(
-            "Email disabled. To=%s Subject=%s Preview=%s", to, subject, preview
-        )
+        print(f"EMAIL_DEV_MODE to={to} subject={subject} preview={preview}")
         return
 
     smtp_username = settings.SMTP_USERNAME or settings.SMTP_USER
@@ -178,5 +206,6 @@ def send_email(
             if smtp_username and settings.SMTP_PASSWORD:
                 server.login(smtp_username, settings.SMTP_PASSWORD)
             server.send_message(message)
+        print(f"EMAIL_SENT to={to} subject={subject}")
     except Exception as exc:  # pragma: no cover - network dependent
         logger.error("Failed to send email to %s: %s", to, exc)

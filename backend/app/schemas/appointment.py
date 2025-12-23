@@ -38,6 +38,7 @@ class AppointmentUpdate(BaseModel):
 class AppointmentResponse(AppointmentBase):
     id: int
     patient: PatientResponse | None = None
+    reminder_sent_at: datetime | None = None
     created_at: datetime
 
     class Config:

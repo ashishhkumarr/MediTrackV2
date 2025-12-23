@@ -22,6 +22,7 @@ class Appointment(Base):
     department = Column(String, nullable=True)
     appointment_datetime = Column(DateTime, nullable=False)
     appointment_end_datetime = Column(DateTime, nullable=True)
+    reminder_sent_at = Column(DateTime, nullable=True)
     notes = Column(Text, nullable=True)
     status = Column(
         Enum(AppointmentStatus),

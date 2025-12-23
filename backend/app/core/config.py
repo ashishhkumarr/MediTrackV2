@@ -20,6 +20,8 @@ class Settings(BaseSettings):
     SMTP_USE_TLS: bool = True
     EMAIL_ENABLED: bool = False
     REMINDER_HOURS_BEFORE: int = 24
+    REMINDER_WINDOW_HOURS: int = 24
+    REMINDER_LOOKAHEAD_MINUTES: int = 5
     APPOINTMENT_DEFAULT_DURATION_MINUTES: int = 30
     ADMIN_DEFAULT_EMAIL: str = "admin@meditrack.com"
     ADMIN_DEFAULT_PASSWORD: str = "ChangeMe123!"

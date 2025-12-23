@@ -5,7 +5,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import DateTime, String, Text, inspect, text
 
-from app.api.v1 import appointments, auth, patients, users
+from app.api.v1 import appointments, auth, patients, reminders, users
 from app.core.config import settings
 from app.core.security import get_password_hash
 from app.db import base  # noqa: F401 ensures models imported
@@ -27,6 +27,7 @@ def ensure_schema_columns():
         ],
         "appointments": [
             ("appointment_end_datetime", DateTime()),
+            ("reminder_sent_at", DateTime()),
         ],
     }
 
@@ -105,6 +106,7 @@ app.include_router(auth.router, prefix=settings.API_V1_STR)
 app.include_router(users.router, prefix=settings.API_V1_STR)
 app.include_router(patients.router, prefix=settings.API_V1_STR)
 app.include_router(appointments.router, prefix=settings.API_V1_STR)
+app.include_router(reminders.router, prefix=settings.API_V1_STR)
 
 
 @app.get("/")

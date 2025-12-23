@@ -143,6 +143,9 @@ def _send_confirmation_email(db: Session, appointment: Appointment, patient: Pat
     recipient = _patient_email(patient)
     if not recipient or appointment.status != AppointmentStatus.scheduled:
         return
+    print(
+        f"EMAIL_TRIGGER event=create appointment_id={appointment.id} patient_email={recipient}"
+    )
     clinic_name = _get_clinic_name(db)
     start_time = appointment.appointment_datetime
     end_time = _resolve_end_time(
@@ -166,6 +169,9 @@ def _send_update_email(
     recipient = _patient_email(patient)
     if not recipient:
         return
+    print(
+        f"EMAIL_TRIGGER event=update appointment_id={appointment.id} patient_email={recipient}"
+    )
     clinic_name = _get_clinic_name(db)
     subject, html_body, text_body = build_update_email(
         patient.full_name,
@@ -195,6 +201,9 @@ def _send_cancellation_email(
     recipient = _patient_email(patient)
     if not recipient:
         return
+    print(
+        f"EMAIL_TRIGGER event=cancel appointment_id={appointment.id} patient_email={recipient}"
+    )
     clinic_name = _get_clinic_name(db)
     snapshot = old_snapshot or _snapshot_appointment(appointment)
     subject, html_body, text_body = build_cancellation_email(
