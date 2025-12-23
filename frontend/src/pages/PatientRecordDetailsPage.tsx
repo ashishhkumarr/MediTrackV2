@@ -6,6 +6,7 @@ import { Button } from "../components/ui/Button";
 import { Card } from "../components/ui/Card";
 import { TextAreaField } from "../components/ui/FormField";
 import { SectionHeader } from "../components/ui/SectionHeader";
+import { useAuth } from "../hooks/useAuth";
 import { usePatient, usePatientAppointments, useUpdatePatientNotes } from "../hooks/usePatients";
 import { Appointment, AppointmentStatus } from "../services/appointments";
 
@@ -94,9 +95,12 @@ const PatientDetailPage = () => {
     error: appointmentsError
   } = usePatientAppointments(patientId);
   const updateNotes = useUpdatePatientNotes();
+  const { token } = useAuth();
   const [notes, setNotes] = useState("");
   const [notesSaved, setNotesSaved] = useState(false);
   const [notesError, setNotesError] = useState<string | null>(null);
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
 
   useEffect(() => {
     setNotes(patient?.notes ?? "");
@@ -155,11 +159,59 @@ const PatientDetailPage = () => {
     );
   }
 
+  const handleExport = async () => {
+    if (!token) {
+      setExportError("You must be signed in to export patient records.");
+      return;
+    }
+    setExportError(null);
+    setExporting(true);
+    try {
+      const baseUrl = import.meta.env.VITE_API_BASE_URL || "/api/v1";
+      const response = await fetch(`${baseUrl}/patients/${patient.id}/export`, {
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      });
+      if (!response.ok) {
+        const errorPayload = await response.json().catch(() => null);
+        const message =
+          errorPayload?.detail ||
+          "We couldn't export this patient record. Please try again.";
+        throw new Error(message);
+      }
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `patient_${patient.id}_record.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (error: any) {
+      setExportError(error.message || "We couldn't export this patient record.");
+    } finally {
+      setExporting(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
-      <Link to="/patients" className="text-sm font-medium text-slate-500 hover:text-brand">
-        ← Back to Patients
-      </Link>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <Link to="/patients" className="text-sm font-medium text-slate-500 hover:text-brand">
+          ← Back to Patients
+        </Link>
+        <Button
+          variant="secondary"
+          onClick={handleExport}
+          isLoading={exporting}
+          disabled={exporting}
+        >
+          {exporting ? "Exporting..." : "Export PDF"}
+        </Button>
+      </div>
+      {exportError && <ErrorState message={exportError} />}
 
       <Card className="animate-fadeIn">
         <SectionHeader

@@ -73,8 +73,7 @@ def update_me(
     return current_user
 
 
-@router.api_route("/change-password", methods=["POST", "PUT"])
-def change_password(
+def _apply_password_change(
     payload: PasswordChange,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
@@ -88,6 +87,24 @@ def change_password(
     db.add(current_user)
     db.commit()
     return {"detail": "Password updated successfully"}
+
+
+@router.post("/change-password", operation_id="change_password_post")
+def change_password_post(
+    payload: PasswordChange,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    return _apply_password_change(payload, db, current_user)
+
+
+@router.put("/change-password", operation_id="change_password_put")
+def change_password_put(
+    payload: PasswordChange,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    return _apply_password_change(payload, db, current_user)
 
 
 @router.get("/", response_model=list[UserResponse])

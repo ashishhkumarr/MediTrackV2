@@ -160,6 +160,12 @@ Services:
 
 Stop with `docker compose down` (add `-v` to wipe Postgres volume).
 
+Dev reset workflow:
+
+```bash
+docker compose down -v && docker compose up --build
+```
+
 ### Dev Hot-Reload (Docker)
 
 For live reload of both backend (uvicorn --reload) and frontend (Vite dev server) without rebuilding on every change:
@@ -204,6 +210,38 @@ All endpoints honor JWT bearer tokens (`Authorization: Bearer <token>`). Passwor
 ## Default Data / Seeds
 
 On startup the backend auto-creates an admin using `ADMIN_DEFAULT_EMAIL` and `ADMIN_DEFAULT_PASSWORD` for local/dev. In production or normal flows, create a new admin/doctor from the `/signup` page, which issues a JWT and logs you in immediately.
+
+## Deployment
+
+Required environment variables:
+
+- `DATABASE_URL`
+- `SECRET_KEY`
+- `ACCESS_TOKEN_EXPIRE_MINUTES`
+- `ADMIN_DEFAULT_EMAIL`
+- `ADMIN_DEFAULT_PASSWORD`
+- `EMAIL_ENABLED`
+
+Optional email variables (only needed when `EMAIL_ENABLED=true`):
+
+- `SMTP_HOST`
+- `SMTP_PORT`
+- `SMTP_USERNAME` (or `SMTP_USER`)
+- `SMTP_PASSWORD`
+- `SMTP_FROM`
+- `SMTP_USE_TLS`
+
+Recommended production settings:
+
+- Use a strong `SECRET_KEY` and rotate default admin credentials after first login.
+- Point `DATABASE_URL` at a managed Postgres instance.
+- Restrict CORS origins in `backend/app/main.py`.
+- Keep `EMAIL_ENABLED=false` until SMTP is configured.
+
+Ports and URLs:
+
+- Backend: `http://<host>:8000` (`/api/v1` for API routes)
+- Frontend: `http://<host>:5173` (Dockerized production build via nginx)
 
 ## AWS Deployment Guide
 
