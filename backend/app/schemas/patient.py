@@ -35,6 +35,10 @@ class PatientUpdate(BaseModel):
     notes: str | None = None
 
 
+class PatientNotesUpdate(BaseModel):
+    notes: str | None = None
+
+
 class PatientResponse(PatientBase):
     id: int
     full_name: str

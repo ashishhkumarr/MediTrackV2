@@ -41,3 +41,19 @@ def test_admin_can_view_patient_details(client, db_session):
 def test_patient_routes_require_authentication(client):
     response = client.get("/api/v1/patients/")
     assert response.status_code == 401
+
+
+def test_admin_can_update_patient_notes(client, db_session):
+    patient = Patient(full_name="Notes Patient", notes="Initial note")
+    db_session.add(patient)
+    db_session.commit()
+    db_session.refresh(patient)
+
+    headers = get_admin_headers(client)
+    response = client.patch(
+        f"/api/v1/patients/{patient.id}",
+        headers=headers,
+        json={"notes": "Updated note"},
+    )
+    assert response.status_code == 200
+    assert response.json()["notes"] == "Updated note"

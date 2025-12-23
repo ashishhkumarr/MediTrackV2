@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 
 import { ErrorState } from "../components/ErrorState";
 import { LoadingSpinner } from "../components/LoadingSpinner";
@@ -36,6 +36,7 @@ const initialFormState: PatientFormState = {
 const PatientListPage = () => {
   const { data, isLoading, error } = usePatients();
   const createPatient = useCreatePatient();
+  const navigate = useNavigate();
   const [searchTerm, setSearchTerm] = useState("");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [formState, setFormState] = useState<PatientFormState>(initialFormState);
@@ -226,7 +227,11 @@ const PatientListPage = () => {
             </thead>
             <tbody className="divide-y divide-slate-100 bg-white">
               {filteredPatients.map((patient) => (
-                <tr key={patient.id} className="transition hover:bg-slate-50">
+                <tr
+                  key={patient.id}
+                  className="cursor-pointer transition hover:bg-slate-50"
+                  onClick={() => navigate(`/patients/${patient.id}`)}
+                >
                   <td className="px-4 py-3">
                     <Link
                       to={`/patients/${patient.id}`}

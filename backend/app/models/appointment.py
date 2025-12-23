@@ -21,6 +21,7 @@ class Appointment(Base):
     doctor_name = Column(String, nullable=False)
     department = Column(String, nullable=True)
     appointment_datetime = Column(DateTime, nullable=False)
+    appointment_end_datetime = Column(DateTime, nullable=True)
     notes = Column(Text, nullable=True)
     status = Column(
         Enum(AppointmentStatus),

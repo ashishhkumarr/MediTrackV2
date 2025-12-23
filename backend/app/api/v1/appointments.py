@@ -29,6 +29,16 @@ def _get_appointment(db: Session, appointment_id: int) -> Appointment:
     return appointment
 
 
+def _apply_appointment_update(
+    appointment: Appointment,
+    payload: AppointmentUpdate,
+) -> Appointment:
+    update_data = payload.dict(exclude_unset=True)
+    for field, value in update_data.items():
+        setattr(appointment, field, value)
+    return appointment
+
+
 @router.get("/", response_model=list[AppointmentResponse])
 def list_appointments(
     db: Session = Depends(get_db),
@@ -64,11 +74,55 @@ def update_appointment(
     _: User = Depends(get_current_admin),
 ):
     appointment = _get_appointment(db, appointment_id)
-    for field, value in payload.dict(exclude_unset=True).items():
-        setattr(appointment, field, value)
+    _apply_appointment_update(appointment, payload)
     db.add(appointment)
     db.commit()
     db.refresh(appointment)
+    return appointment
+
+
+@router.patch("/{appointment_id}", response_model=AppointmentResponse)
+def patch_appointment(
+    appointment_id: int,
+    payload: AppointmentUpdate,
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_admin),
+):
+    appointment = _get_appointment(db, appointment_id)
+    _apply_appointment_update(appointment, payload)
+    db.add(appointment)
+    db.commit()
+    db.refresh(appointment)
+    return appointment
+
+
+@router.patch("/{appointment_id}/cancel", response_model=AppointmentResponse)
+def cancel_appointment(
+    appointment_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_admin),
+):
+    appointment = _get_appointment(db, appointment_id)
+    if appointment.status != AppointmentStatus.cancelled:
+        appointment.status = AppointmentStatus.cancelled
+        db.add(appointment)
+        db.commit()
+        db.refresh(appointment)
+    return appointment
+
+
+@router.patch("/{appointment_id}/complete", response_model=AppointmentResponse)
+def complete_appointment(
+    appointment_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_admin),
+):
+    appointment = _get_appointment(db, appointment_id)
+    if appointment.status != AppointmentStatus.completed:
+        appointment.status = AppointmentStatus.completed
+        db.add(appointment)
+        db.commit()
+        db.refresh(appointment)
     return appointment
 
 

@@ -17,6 +17,7 @@ class AppointmentBase(BaseModel):
     doctor_name: str
     department: str | None = None
     appointment_datetime: datetime
+    appointment_end_datetime: datetime | None = None
     notes: str | None = None
     status: AppointmentStatus = AppointmentStatus.scheduled
 
@@ -29,6 +30,7 @@ class AppointmentUpdate(BaseModel):
     doctor_name: str | None = None
     department: str | None = None
     appointment_datetime: datetime | None = None
+    appointment_end_datetime: datetime | None = None
     notes: str | None = None
     status: AppointmentStatus | None = None
 

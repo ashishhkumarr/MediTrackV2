@@ -9,7 +9,7 @@ import EditProfilePage from "./pages/EditProfilePage";
 import LoginPage from "./pages/LoginPage";
 import NotFoundPage from "./pages/NotFoundPage";
 import PatientListPage from "./pages/PatientListPage";
-import PatientRecordDetailsPage from "./pages/PatientRecordDetailsPage";
+import PatientDetailPage from "./pages/PatientRecordDetailsPage";
 import SignupPage from "./pages/SignupPage";
 import ChangePasswordPage from "./pages/ChangePasswordPage";
 
@@ -66,7 +66,7 @@ const App = () => {
             path="/patients/:id"
             element={
               <ProtectedRoute roles={["admin"]}>
-                <PatientRecordDetailsPage />
+                <PatientDetailPage />
               </ProtectedRoute>
             }
           />

@@ -3,10 +3,13 @@ from sqlalchemy.orm import Session
 
 from app.core.security import get_current_admin
 from app.db.session import get_db
+from app.models.appointment import Appointment
 from app.models.patient import Patient
 from app.models.user import User
+from app.schemas.appointment import AppointmentResponse
 from app.schemas.patient import (
     PatientCreate,
+    PatientNotesUpdate,
     PatientResponse,
     PatientUpdate,
 )
@@ -48,6 +51,21 @@ def get_patient(
 ):
     patient = _get_patient(db, patient_id)
     return patient
+
+
+@router.get("/{patient_id}/appointments", response_model=list[AppointmentResponse])
+def list_patient_appointments(
+    patient_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_admin),
+):
+    patient = _get_patient(db, patient_id)
+    return (
+        db.query(Appointment)
+        .filter(Appointment.patient_id == patient.id)
+        .order_by(Appointment.appointment_datetime.desc())
+        .all()
+    )
 
 
 @router.post("/", response_model=PatientResponse, status_code=status.HTTP_201_CREATED)
@@ -94,6 +112,23 @@ def update_patient(
             payload_data["full_name"] = full_name
     for field, value in payload_data.items():
         setattr(patient, field, value)
+    db.add(patient)
+    db.commit()
+    db.refresh(patient)
+    return patient
+
+
+@router.patch("/{patient_id}", response_model=PatientResponse)
+def update_patient_notes(
+    patient_id: int,
+    payload: PatientNotesUpdate,
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_admin),
+):
+    patient = _get_patient(db, patient_id)
+    update_data = payload.dict(exclude_unset=True)
+    if "notes" in update_data:
+        patient.notes = update_data["notes"]
     db.add(patient)
     db.commit()
     db.refresh(patient)
