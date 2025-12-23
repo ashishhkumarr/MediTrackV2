@@ -14,7 +14,7 @@ class AppointmentStatus(str, Enum):
 
 class AppointmentBase(BaseModel):
     patient_id: int
-    doctor_name: str
+    doctor_name: str | None = None
     department: str | None = None
     appointment_datetime: datetime
     appointment_end_datetime: datetime | None = None

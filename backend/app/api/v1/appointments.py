@@ -1,6 +1,9 @@
+from datetime import timedelta
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session, selectinload
 
+from app.core.config import settings
 from app.core.security import get_current_admin
 from app.db.session import get_db
 from app.models.appointment import Appointment, AppointmentStatus
@@ -13,6 +16,7 @@ from app.schemas.appointment import (
 )
 
 router = APIRouter(prefix="/appointments", tags=["appointments"])
+DEFAULT_DOCTOR_NAME = "TBD"
 
 
 def _get_appointment(db: Session, appointment_id: int) -> Appointment:
@@ -29,11 +33,67 @@ def _get_appointment(db: Session, appointment_id: int) -> Appointment:
     return appointment
 
 
-def _apply_appointment_update(
-    appointment: Appointment,
-    payload: AppointmentUpdate,
-) -> Appointment:
+def _normalize_doctor_name(name: str | None) -> str:
+    if name and name.strip():
+        return name.strip()
+    return DEFAULT_DOCTOR_NAME
+
+
+def _validate_time_range(start_time, end_time):
+    if end_time and start_time and end_time <= start_time:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Appointment end time must be after start time.",
+        )
+
+
+def _resolve_end_time(start_time, end_time):
+    if not start_time:
+        return end_time
+    return end_time or start_time + timedelta(
+        minutes=settings.APPOINTMENT_DEFAULT_DURATION_MINUTES
+    )
+
+
+def _assert_no_overlapping_appointments(
+    db: Session,
+    start_time,
+    end_time,
+    appointment_id: int | None = None,
+):
+    effective_end_time = _resolve_end_time(start_time, end_time)
+    if not start_time or not effective_end_time:
+        return
+
+    query = db.query(Appointment).filter(
+        Appointment.status == AppointmentStatus.scheduled
+    )
+    if appointment_id is not None:
+        query = query.filter(Appointment.id != appointment_id)
+
+    for existing in query.all():
+        existing_start = existing.appointment_datetime
+        existing_end = _resolve_end_time(
+            existing_start, existing.appointment_end_datetime
+        )
+        if existing_start and existing_end:
+            if start_time < existing_end and effective_end_time > existing_start:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Appointment time overlaps with an existing appointment.",
+                )
+
+
+def _prepare_update_data(payload: AppointmentUpdate) -> dict:
     update_data = payload.dict(exclude_unset=True)
+    if "doctor_name" in update_data:
+        update_data["doctor_name"] = _normalize_doctor_name(
+            update_data.get("doctor_name")
+        )
+    return update_data
+
+
+def _apply_appointment_update(appointment: Appointment, update_data: dict) -> Appointment:
     for field, value in update_data.items():
         setattr(appointment, field, value)
     return appointment
@@ -58,7 +118,20 @@ def create_appointment(
     _: User = Depends(get_current_admin),
 ):
     patient = _ensure_patient_exists(db, payload.patient_id)
-    appointment = Appointment(**payload.dict())
+    payload_data = payload.dict(exclude_unset=True)
+    payload_data["doctor_name"] = _normalize_doctor_name(payload_data.get("doctor_name"))
+    _validate_time_range(
+        payload_data.get("appointment_datetime"),
+        payload_data.get("appointment_end_datetime"),
+    )
+    status_value = payload_data.get("status", AppointmentStatus.scheduled)
+    if status_value == AppointmentStatus.scheduled:
+        _assert_no_overlapping_appointments(
+            db,
+            payload_data.get("appointment_datetime"),
+            payload_data.get("appointment_end_datetime"),
+        )
+    appointment = Appointment(**payload_data)
     db.add(appointment)
     db.commit()
     db.refresh(appointment)
@@ -74,7 +147,20 @@ def update_appointment(
     _: User = Depends(get_current_admin),
 ):
     appointment = _get_appointment(db, appointment_id)
-    _apply_appointment_update(appointment, payload)
+    update_data = _prepare_update_data(payload)
+    start_time = update_data.get("appointment_datetime", appointment.appointment_datetime)
+    end_time = (
+        update_data["appointment_end_datetime"]
+        if "appointment_end_datetime" in update_data
+        else appointment.appointment_end_datetime
+    )
+    status_value = update_data.get("status", appointment.status)
+    _validate_time_range(start_time, end_time)
+    if status_value == AppointmentStatus.scheduled:
+        _assert_no_overlapping_appointments(
+            db, start_time, end_time, appointment_id=appointment.id
+        )
+    _apply_appointment_update(appointment, update_data)
     db.add(appointment)
     db.commit()
     db.refresh(appointment)
@@ -89,7 +175,20 @@ def patch_appointment(
     _: User = Depends(get_current_admin),
 ):
     appointment = _get_appointment(db, appointment_id)
-    _apply_appointment_update(appointment, payload)
+    update_data = _prepare_update_data(payload)
+    start_time = update_data.get("appointment_datetime", appointment.appointment_datetime)
+    end_time = (
+        update_data["appointment_end_datetime"]
+        if "appointment_end_datetime" in update_data
+        else appointment.appointment_end_datetime
+    )
+    status_value = update_data.get("status", appointment.status)
+    _validate_time_range(start_time, end_time)
+    if status_value == AppointmentStatus.scheduled:
+        _assert_no_overlapping_appointments(
+            db, start_time, end_time, appointment_id=appointment.id
+        )
+    _apply_appointment_update(appointment, update_data)
     db.add(appointment)
     db.commit()
     db.refresh(appointment)

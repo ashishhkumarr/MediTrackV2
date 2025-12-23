@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     SMTP_USER: str | None = None
     SMTP_PASSWORD: str | None = None
     REMINDER_HOURS_BEFORE: int = 24
+    APPOINTMENT_DEFAULT_DURATION_MINUTES: int = 30
     ADMIN_DEFAULT_EMAIL: str = "admin@meditrack.com"
     ADMIN_DEFAULT_PASSWORD: str = "ChangeMe123!"
 

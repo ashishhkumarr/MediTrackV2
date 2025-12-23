@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 
 import { ErrorState } from "../components/ErrorState";
 import { LoadingSpinner } from "../components/LoadingSpinner";
@@ -57,7 +57,7 @@ const formatDateTimeCell = (appointment: Appointment) => {
   const endTime =
     end && !Number.isNaN(end.getTime())
       ? end.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
-      : "—";
+      : "TBD";
   return { dateLabel, timeRange: `${startTime} - ${endTime}` };
 };
 
@@ -84,6 +84,7 @@ const AppointmentListPage = () => {
   const cancelAppointment = useCancelAppointment();
   const completeAppointment = useCompleteAppointment();
   const navigate = useNavigate();
+  const location = useLocation();
 
   const [showCancelled, setShowCancelled] = useState(false);
   const [selectedAppointment, setSelectedAppointment] = useState<Appointment | null>(null);
@@ -110,6 +111,14 @@ const AppointmentListPage = () => {
     const timer = window.setTimeout(() => setSuccessMessage(null), 3500);
     return () => window.clearTimeout(timer);
   }, [successMessage]);
+
+  useEffect(() => {
+    const locationState = location.state as { successMessage?: string } | null;
+    if (locationState?.successMessage) {
+      setSuccessMessage(locationState.successMessage);
+      navigate(location.pathname, { replace: true, state: null });
+    }
+  }, [location, navigate]);
 
   useEffect(() => {
     if (!isModalOpen) return;
@@ -175,8 +184,12 @@ const AppointmentListPage = () => {
     if (!formState.appointment_datetime) {
       nextErrors.appointment_datetime = "Required";
     }
-    if (!formState.doctor_name.trim()) {
-      nextErrors.doctor_name = "Required";
+    if (formState.appointment_end_datetime) {
+      const startTime = new Date(formState.appointment_datetime).getTime();
+      const endTime = new Date(formState.appointment_end_datetime).getTime();
+      if (!Number.isNaN(startTime) && !Number.isNaN(endTime) && endTime <= startTime) {
+        nextErrors.appointment_end_datetime = "End time must be after start time";
+      }
     }
     setFormErrors(nextErrors);
     return Object.keys(nextErrors).length === 0;
@@ -450,17 +463,16 @@ const AppointmentListPage = () => {
                       name="appointment_end_datetime"
                       value={formState.appointment_end_datetime}
                       onChange={handleFieldChange}
+                      error={formErrors.appointment_end_datetime}
                     />
                     <InputField
-                      label="Doctor"
+                      label="Doctor (optional)"
                       name="doctor_name"
                       value={formState.doctor_name}
                       onChange={handleFieldChange}
-                      error={formErrors.doctor_name}
-                      required
                     />
                     <InputField
-                      label="Department"
+                      label="Department (optional)"
                       name="department"
                       value={formState.department}
                       onChange={handleFieldChange}

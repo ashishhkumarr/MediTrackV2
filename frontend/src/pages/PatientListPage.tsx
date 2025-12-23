@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 
 import { ErrorState } from "../components/ErrorState";
 import { LoadingSpinner } from "../components/LoadingSpinner";
@@ -37,6 +37,7 @@ const PatientListPage = () => {
   const { data, isLoading, error } = usePatients();
   const createPatient = useCreatePatient();
   const navigate = useNavigate();
+  const location = useLocation();
   const [searchTerm, setSearchTerm] = useState("");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [formState, setFormState] = useState<PatientFormState>(initialFormState);
@@ -51,6 +52,19 @@ const PatientListPage = () => {
     const timer = window.setTimeout(() => setSuccessMessage(null), 4000);
     return () => window.clearTimeout(timer);
   }, [successMessage]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    if (params.get("new") !== "1") return;
+    setIsModalOpen(true);
+    setApiError(null);
+    params.delete("new");
+    const search = params.toString();
+    navigate(
+      { pathname: location.pathname, search: search ? `?${search}` : "" },
+      { replace: true }
+    );
+  }, [location.pathname, location.search, navigate]);
 
   useEffect(() => {
     if (!isModalOpen) return;
