@@ -3,6 +3,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import DateTime, String, Text, inspect, text
 
 from app.api.v1 import appointments, auth, patients, users
 from app.core.config import settings
@@ -13,6 +14,38 @@ from app.models.user import User, UserRole
 from app.services.reminder_service import scheduler
 
 logger = logging.getLogger("meditrack")
+
+def ensure_schema_columns():
+    inspector = inspect(engine)
+    existing_tables = set(inspector.get_table_names())
+    desired_columns = {
+        "patients": [
+            ("first_name", String()),
+            ("last_name", String()),
+            ("sex", String()),
+            ("address", Text()),
+        ],
+        "appointments": [
+            ("appointment_end_datetime", DateTime()),
+        ],
+    }
+
+    with engine.begin() as connection:
+        for table_name, columns in desired_columns.items():
+            if table_name not in existing_tables:
+                continue
+            existing_columns = {
+                column["name"] for column in inspector.get_columns(table_name)
+            }
+            for column_name, column_type in columns:
+                if column_name in existing_columns:
+                    continue
+                column_sql = column_type.compile(dialect=connection.dialect)
+                connection.execute(
+                    text(
+                        f"ALTER TABLE {table_name} ADD COLUMN {column_name} {column_sql}"
+                    )
+                )
 
 
 def create_default_admin():
@@ -42,6 +75,7 @@ def create_default_admin():
 async def lifespan(app: FastAPI):
     try:
         base.Base.metadata.create_all(bind=engine)
+        ensure_schema_columns()
         create_default_admin()
     except Exception as exc:  # pragma: no cover - keeps app booting during migrations/tests
         logger.warning("Database bootstrap skipped: %s", exc)
