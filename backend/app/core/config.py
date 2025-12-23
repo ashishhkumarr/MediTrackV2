@@ -14,7 +14,11 @@ class Settings(BaseSettings):
     SMTP_HOST: str | None = None
     SMTP_PORT: int = 587
     SMTP_USER: str | None = None
+    SMTP_USERNAME: str | None = None
     SMTP_PASSWORD: str | None = None
+    SMTP_FROM: str | None = None
+    SMTP_USE_TLS: bool = True
+    EMAIL_ENABLED: bool = False
     REMINDER_HOURS_BEFORE: int = 24
     APPOINTMENT_DEFAULT_DURATION_MINUTES: int = 30
     ADMIN_DEFAULT_EMAIL: str = "admin@meditrack.com"

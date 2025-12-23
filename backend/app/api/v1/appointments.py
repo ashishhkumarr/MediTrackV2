@@ -8,11 +8,17 @@ from app.core.security import get_current_admin
 from app.db.session import get_db
 from app.models.appointment import Appointment, AppointmentStatus
 from app.models.patient import Patient
-from app.models.user import User
+from app.models.user import User, UserRole
 from app.schemas.appointment import (
     AppointmentCreate,
     AppointmentResponse,
     AppointmentUpdate,
+)
+from app.services.email import (
+    build_cancellation_email,
+    build_confirmation_email,
+    build_update_email,
+    send_email,
 )
 
 router = APIRouter(prefix="/appointments", tags=["appointments"])
@@ -37,6 +43,15 @@ def _normalize_doctor_name(name: str | None) -> str:
     if name and name.strip():
         return name.strip()
     return DEFAULT_DOCTOR_NAME
+
+
+def _get_clinic_name(db: Session) -> str:
+    clinic = (
+        db.query(User)
+        .filter(User.role == UserRole.admin, User.clinic_name.isnot(None))
+        .first()
+    )
+    return clinic.clinic_name if clinic and clinic.clinic_name else settings.PROJECT_NAME
 
 
 def _validate_time_range(start_time, end_time):
@@ -93,6 +108,110 @@ def _prepare_update_data(payload: AppointmentUpdate) -> dict:
     return update_data
 
 
+def _snapshot_appointment(appointment: Appointment) -> dict:
+    return {
+        "appointment_datetime": appointment.appointment_datetime,
+        "appointment_end_datetime": appointment.appointment_end_datetime,
+        "doctor_name": appointment.doctor_name,
+        "department": appointment.department,
+        "notes": appointment.notes,
+        "status": appointment.status,
+    }
+
+
+def _has_update_changes(old: dict, appointment: Appointment) -> bool:
+    return any(
+        [
+            old["appointment_datetime"] != appointment.appointment_datetime,
+            old["appointment_end_datetime"] != appointment.appointment_end_datetime,
+            old["doctor_name"] != appointment.doctor_name,
+            old["department"] != appointment.department,
+            old["notes"] != appointment.notes,
+            old["status"] != appointment.status,
+        ]
+    )
+
+
+def _patient_email(patient: Patient) -> str | None:
+    if not patient.email:
+        return None
+    email = patient.email.strip()
+    return email or None
+
+
+def _send_confirmation_email(db: Session, appointment: Appointment, patient: Patient) -> None:
+    recipient = _patient_email(patient)
+    if not recipient or appointment.status != AppointmentStatus.scheduled:
+        return
+    clinic_name = _get_clinic_name(db)
+    start_time = appointment.appointment_datetime
+    end_time = _resolve_end_time(
+        appointment.appointment_datetime, appointment.appointment_end_datetime
+    )
+    subject, html_body, text_body = build_confirmation_email(
+        patient.full_name,
+        clinic_name,
+        start_time,
+        end_time,
+        appointment.doctor_name,
+        appointment.department,
+        appointment.notes,
+    )
+    send_email(recipient, subject, html_body, text_body)
+
+
+def _send_update_email(
+    db: Session, appointment: Appointment, patient: Patient, old_snapshot: dict
+) -> None:
+    recipient = _patient_email(patient)
+    if not recipient:
+        return
+    clinic_name = _get_clinic_name(db)
+    subject, html_body, text_body = build_update_email(
+        patient.full_name,
+        clinic_name,
+        old_snapshot["appointment_datetime"],
+        _resolve_end_time(
+            old_snapshot["appointment_datetime"],
+            old_snapshot["appointment_end_datetime"],
+        ),
+        old_snapshot["doctor_name"],
+        old_snapshot["department"],
+        old_snapshot["notes"],
+        appointment.appointment_datetime,
+        _resolve_end_time(
+            appointment.appointment_datetime, appointment.appointment_end_datetime
+        ),
+        appointment.doctor_name,
+        appointment.department,
+        appointment.notes,
+    )
+    send_email(recipient, subject, html_body, text_body)
+
+
+def _send_cancellation_email(
+    db: Session, appointment: Appointment, patient: Patient, old_snapshot: dict | None = None
+) -> None:
+    recipient = _patient_email(patient)
+    if not recipient:
+        return
+    clinic_name = _get_clinic_name(db)
+    snapshot = old_snapshot or _snapshot_appointment(appointment)
+    subject, html_body, text_body = build_cancellation_email(
+        patient.full_name,
+        clinic_name,
+        snapshot["appointment_datetime"],
+        _resolve_end_time(
+            snapshot["appointment_datetime"],
+            snapshot["appointment_end_datetime"],
+        ),
+        snapshot["doctor_name"],
+        snapshot["department"],
+        snapshot["notes"],
+    )
+    send_email(recipient, subject, html_body, text_body)
+
+
 def _apply_appointment_update(appointment: Appointment, update_data: dict) -> Appointment:
     for field, value in update_data.items():
         setattr(appointment, field, value)
@@ -136,6 +255,7 @@ def create_appointment(
     db.commit()
     db.refresh(appointment)
     appointment.patient = patient
+    _send_confirmation_email(db, appointment, patient)
     return appointment
 
 
@@ -147,6 +267,7 @@ def update_appointment(
     _: User = Depends(get_current_admin),
 ):
     appointment = _get_appointment(db, appointment_id)
+    old_snapshot = _snapshot_appointment(appointment)
     update_data = _prepare_update_data(payload)
     start_time = update_data.get("appointment_datetime", appointment.appointment_datetime)
     end_time = (
@@ -164,6 +285,13 @@ def update_appointment(
     db.add(appointment)
     db.commit()
     db.refresh(appointment)
+    if appointment.status == AppointmentStatus.cancelled:
+        if old_snapshot["status"] != AppointmentStatus.cancelled:
+            _send_cancellation_email(db, appointment, appointment.patient, old_snapshot)
+    elif appointment.status == AppointmentStatus.scheduled and _has_update_changes(
+        old_snapshot, appointment
+    ):
+        _send_update_email(db, appointment, appointment.patient, old_snapshot)
     return appointment
 
 
@@ -175,6 +303,7 @@ def patch_appointment(
     _: User = Depends(get_current_admin),
 ):
     appointment = _get_appointment(db, appointment_id)
+    old_snapshot = _snapshot_appointment(appointment)
     update_data = _prepare_update_data(payload)
     start_time = update_data.get("appointment_datetime", appointment.appointment_datetime)
     end_time = (
@@ -192,6 +321,13 @@ def patch_appointment(
     db.add(appointment)
     db.commit()
     db.refresh(appointment)
+    if appointment.status == AppointmentStatus.cancelled:
+        if old_snapshot["status"] != AppointmentStatus.cancelled:
+            _send_cancellation_email(db, appointment, appointment.patient, old_snapshot)
+    elif appointment.status == AppointmentStatus.scheduled and _has_update_changes(
+        old_snapshot, appointment
+    ):
+        _send_update_email(db, appointment, appointment.patient, old_snapshot)
     return appointment
 
 
@@ -203,10 +339,12 @@ def cancel_appointment(
 ):
     appointment = _get_appointment(db, appointment_id)
     if appointment.status != AppointmentStatus.cancelled:
+        old_snapshot = _snapshot_appointment(appointment)
         appointment.status = AppointmentStatus.cancelled
         db.add(appointment)
         db.commit()
         db.refresh(appointment)
+        _send_cancellation_email(db, appointment, appointment.patient, old_snapshot)
     return appointment
 
 

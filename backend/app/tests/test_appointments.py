@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta
 
+from app.api.v1 import appointments as appointments_api
 from app.models.patient import Patient
 
 from .test_auth import get_admin_headers
@@ -316,3 +317,79 @@ def test_null_end_time_uses_default_duration(client, db_session):
         second_response.json()["detail"]
         == "Appointment time overlaps with an existing appointment."
     )
+
+
+def test_email_sent_on_create_update_and_cancel(client, db_session, monkeypatch):
+    patient = _create_patient(db_session)
+    patient.email = "notify@example.com"
+    db_session.add(patient)
+    db_session.commit()
+    db_session.refresh(patient)
+    headers = get_admin_headers(client)
+    sent = []
+
+    def fake_send_email(to, subject, html_body, text_body=None):
+        sent.append({"to": to, "subject": subject})
+
+    monkeypatch.setattr(appointments_api, "send_email", fake_send_email)
+
+    create_response = client.post(
+        "/api/v1/appointments/",
+        headers=headers,
+        json={
+            "patient_id": patient.id,
+            "doctor_name": "Dr. Email",
+            "appointment_datetime": (BASE_TIME + timedelta(hours=7)).isoformat(),
+            "appointment_end_datetime": (BASE_TIME + timedelta(hours=7, minutes=30)).isoformat(),
+            "status": "Scheduled",
+        },
+    )
+    assert create_response.status_code == 201
+    appointment_id = create_response.json()["id"]
+    assert len(sent) == 1
+
+    update_response = client.patch(
+        f"/api/v1/appointments/{appointment_id}",
+        headers=headers,
+        json={
+            "appointment_datetime": (BASE_TIME + timedelta(hours=8)).isoformat(),
+            "appointment_end_datetime": (BASE_TIME + timedelta(hours=8, minutes=30)).isoformat(),
+        },
+    )
+    assert update_response.status_code == 200
+    assert len(sent) == 2
+
+    cancel_response = client.patch(
+        f"/api/v1/appointments/{appointment_id}/cancel", headers=headers
+    )
+    assert cancel_response.status_code == 200
+    assert len(sent) == 3
+
+
+def test_no_email_sent_when_patient_missing_email(client, db_session, monkeypatch):
+    patient = _create_patient(db_session)
+    patient.email = None
+    db_session.add(patient)
+    db_session.commit()
+    db_session.refresh(patient)
+    headers = get_admin_headers(client)
+    sent = []
+
+    def fake_send_email(to, subject, html_body, text_body=None):
+        sent.append({"to": to, "subject": subject})
+
+    monkeypatch.setattr(appointments_api, "send_email", fake_send_email)
+
+    create_response = client.post(
+        "/api/v1/appointments/",
+        headers=headers,
+        json={
+            "patient_id": patient.id,
+            "doctor_name": "Dr. Email",
+            "appointment_datetime": (BASE_TIME + timedelta(hours=9)).isoformat(),
+            "appointment_end_datetime": (BASE_TIME + timedelta(hours=9, minutes=30)).isoformat(),
+            "status": "Scheduled",
+        },
+    )
+    assert create_response.status_code == 201
+    assert len(sent) == 0
